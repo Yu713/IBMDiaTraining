@@ -1,2 +1,2 @@
 # daimon
-It uses for how to create a responsive agents by IBM Watson services
+It uses for how to create a responsive agent by IBM Watson services
