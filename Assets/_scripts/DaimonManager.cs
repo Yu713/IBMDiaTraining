@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using CrazyMinnow.SALSA;
@@ -8,9 +8,14 @@ using FullSerializer;
 public class DaimonManager : MonoBehaviour
 {
 
+    
+    private DialogueService dDialogMgr;
     public SpeechInputService mySpeechInputMgr;
     private SpeechOutputService mySpeechOutputMgr;
 
+	public GameObject myCharacter;
+	private Animator myAnimator;
+	
     private Salsa3D salsa3D;
     public RandomEyes3D randomEyes;
     public GameObject[] lookTargets;
@@ -30,9 +35,11 @@ public class DaimonManager : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-
+       
+        dDialogMgr = GetComponent<DialogueService>();
         mySpeechInputMgr = GetComponent<SpeechInputService>();
         mySpeechOutputMgr = GetComponent<SpeechOutputService>();
+		myAnimator = myCharacter.GetComponent<Animator>();
     }
 
 
@@ -72,4 +79,23 @@ public class DaimonManager : MonoBehaviour
 
         }
     }
+
+
+    // check for exercise name (from ExerciseController.cs)
+    // and run the according animation (in myAnimator)
+	public void Animate( string exercise ) {
+		
+		switch (exercise) {
+			case "B12":
+				myAnimator.Play("BreathingIdle");
+				break;
+            case "waving":
+                myAnimator.Play("waving");
+                break;
+			default:
+				break;
+		}
+		
+	}
+	
 }

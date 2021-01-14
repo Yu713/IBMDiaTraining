@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -13,6 +13,7 @@ using IBM.Cloud.SDK.Logging;
 using System;
 using IBM.Watson.Assistant.V2.Model;
 using FullSerializer;
+using System.Linq;
 
 public class DialogueService : MonoBehaviour
 {
@@ -21,25 +22,26 @@ public class DialogueService : MonoBehaviour
     private SpeechOutputService dSpeechOutputMgr;
     private SpeechInputService dSpeechInputMgr;
 
+	
+
     private fsSerializer _serializer = new fsSerializer();
 
     [Space(10)]
-    [Tooltip("The IAM apikey.")]
-    [SerializeField]
-    private string iamApikey = "API key";
-    [Tooltip("The service URL (optional). This defaults to \"https://api.eu-gb.assistant.watson.cloud.ibm.com\"")]
-    [SerializeField]
-    private string serviceUrl = "URL";
+    //[Tooltip("The IAM apikey.")]
+    //[SerializeField]
+    //private string iamApikey = "API";
+    //[Tooltip("The service URL (optional). This defaults to \"https://gateway.watsonplatform.net/assistant/api\"")]
+    //[SerializeField]
+    //private string serviceUrl = "URL";
+
     [Tooltip("The version date with which you would like to use the service in the form YYYY-MM-DD.")]
     [SerializeField]
     private string versionDate = "Date";
     [Tooltip("The assistantId to run the example.")]
     [SerializeField]
-    private string assistantId = "Assistant ID";
-
-    public Animator anim;
-
+	private string assistantId = "ID"; 
     private AssistantService service;
+	private DaimonManager dAImgr;
 
     private string username;
 
@@ -52,6 +54,8 @@ public class DialogueService : MonoBehaviour
         LogSystem.InstallDefaultReactors();
 
         dSpeechOutputMgr = GetComponent<SpeechOutputService>();
+		dAImgr = GetComponent<DaimonManager>();
+		
 
         dSpeechInputMgr = GetComponent<SpeechInputService>();
         dSpeechInputMgr.onInputReceived += OnInputReceived;
@@ -62,9 +66,10 @@ public class DialogueService : MonoBehaviour
 
     private IEnumerator CreateService()
     {
+		/*
         if (string.IsNullOrEmpty(iamApikey))
         {
-            throw new IBMException("Plesae provide IAM ApiKey for the service.");
+            throw new IBMException("Please provide IAM ApiKey for the service.");
         }
 
         //  Create credential and instantiate service
@@ -81,9 +86,13 @@ public class DialogueService : MonoBehaviour
         //  Wait for tokendata
         while (!credentials.HasIamTokenData())
             yield return null;
+		*/
 
-        service = new AssistantService(versionDate, credentials);
+        service = new AssistantService(versionDate); //, credentials);
 
+		while (!service.Authenticator.CanAuthenticate()) // .Credentials.HasIamTokenData()
+            yield return null;
+		
         Runnable.Run(CreateSession());
 
         //Runnable.Run(Examples());
@@ -91,7 +100,7 @@ public class DialogueService : MonoBehaviour
 
     private IEnumerator CreateSession()
     {
-        //Log.Debug("ExampleAssistantV2.RunTest()", "Attempting to CreateSession");
+		Debug.Log("CONNECTING TO ASSISTANT: " + assistantId);
         service.CreateSession(OnCreateSession, assistantId);
 
         while (!createSessionTested)
@@ -133,28 +142,79 @@ public class DialogueService : MonoBehaviour
     private void MakeDance()
     {
         Debug.Log(">>> Starting to dance");
-        anim.Play("Waving", -1, 0);
-
+        dAImgr.Animate("Waving");
     }
 
     private void OnResponseReceived(DetailedResponse<MessageResponse> response, IBMError error)
     {
 
-        Debug.Log("DialogueService response: " + response.Result.Output.Generic[0].Text);
+		if (response.Result.Output.Generic != null && response.Result.Output.Generic.Count > 0) {
+			Debug.Log("DialogueService response: " + response.Result.Output.Generic[0].Text);
+			if (response.Result.Output.Intents.Capacity > 0) Debug.Log("    -> " + response.Result.Output.Intents[0].Intent.ToString());
+		}
 
-        Debug.Log("    -> " + response.Result.Output.Intents[0].Intent.ToString());
-        string intent = response.Result.Output.Intents[0].Intent.ToString();
-        if (intent == "MakeDance")
+        // check if Watson was able to make sense of the user input, otherwise ask to repeat the input
+        if (response.Result.Output.Intents == null && response.Result.Output.Actions == null)
         {
-            MakeDance(); 
-        } else if (intent == "name")
-        {
-            // Debug.Log("    NAME === " + response.Result.Output.Entities[0].Entity.ToString() );
-            username = response.Result.Output.Entities.Find( (x) => x.Entity.ToString()=="sys-person").Value.ToString();
-            Debug.Log("username = " + username);
-        }
+            Debug.Log("I did not understand");
+            dSpeechOutputMgr.Speak("I don't understand, can you rephrase?");
 
-        dSpeechOutputMgr.Speak(response.Result.Output.Generic[0].Text + ", " + username);
+        } else {
+
+            if (response.Result.Output.Intents != null && response.Result.Output.Intents.Count > 0)
+            {
+                string answerIntent = response.Result.Output.Intents[0].Intent.ToString();
+
+                switch (answerIntent)
+                {
+                    case "MakeDance":
+                        MakeDance();
+                        break;
+                  
+                    case "name":
+                        username = response.Result.Output.Entities.Find((x) => x.Entity.ToString() == "sys-person").Value.ToString();
+                        Debug.Log("username = " + username);
+                        break;
+                    default:
+                        break;
+                }
+
+            } // any intents recognised?
+
+            if (response.Result.Output.Actions != null && response.Result.Output.Actions.Count > 0)
+            {
+
+                string actionName = response.Result.Output.Actions[0].Name;
+                // check whether it is really the intent we want to check
+                // (or do we want to know the name of the dialogue step?)
+                switch (actionName)
+                {
+                    case "makeWave":
+                        dAImgr.Animate("waving");
+                        break;
+                    default:
+                        break;
+                }
+
+            } // any action recognised?
+
+            if (response.Result.Output.Generic != null && response.Result.Output.Generic.Capacity > 0)
+            {
+
+                dSpeechOutputMgr.Speak(response.Result.Output.Generic[0].Text); // + ", " + username
+
+            } else // no Generic response coming back, so say something diplomatic
+            {
+                dSpeechOutputMgr.Speak("OK.");
+            }
+            
+            // now all data has been extracted, so we can run through the list of exclusions
+            //UpdateExercises();
+
+            } // Watson did understand the user
+
+        } // end of method OnResponseReceived
+
         //dSpeechInputMgr.Active = false;
 
         //myTTS.myVoice = "de-DE_DieterV3Voice";
@@ -219,7 +279,29 @@ public class DialogueService : MonoBehaviour
         //{
         //    Log.Debug("Extract outputText", "Failed to extract outputText and set for speaking");
         //}
-    }
+
+    //public void UpdateExercises()
+    //{
+
+    //    if ((dUser.Weight != 0) && (dUser.Height != 0))
+    //    {
+    //        dUser.bmi = dUser.Weight / (dUser.Height / 100) ^ 2;
+    //        if (dUser.bmi > 30.0f)
+    //        {
+    //            // = person is obese
+    //            // so let's remove the exercises A3.1 B8.1 B8.2,B8.4, C1.1
+    //            dEC.RemoveExercise("A31");
+    //            dEC.RemoveExercise("B81");
+    //            dEC.RemoveExercise("B82");
+    //            dEC.RemoveExercise("B84");
+    //            dEC.RemoveExercise("C11");
+    //        }
+
+    //    } // user profile contains weight and height
+
+
+
+    //}
 
     public void OnInputReceived(string text )
     {

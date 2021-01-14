@@ -1,9 +1,0 @@
-﻿{
-  "name": "IBM.Cloud.SDK.Tests",
-  "references": [
-    "IBM.Cloud.SDK"
-  ],
-  "optionalUnityReferences": [
-    "TestAssemblies"
-  ]
-}
